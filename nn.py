@@ -1,25 +1,60 @@
-from nn import MLP as m
+import random
+from engine import Value
 
-x = [2.0, 3.8,-19.3]
-n = m(3,[4,4,1])
-print(n(x))
+class Module:
 
-xs = [[3.0,-1.0,2.5],[2.0, 0.8,-1.3],[-1.5,0.5,2.3],[3.5,6.9,-0.3]]
-ys  = [1.0,-4.0,-1.0,1.0]
+    def zero_grad(self):
+        for p in self.parameters():
+            p.grad = 0
 
-for k in range (20) :
-    ypredictability = [n(x) for x in xs ]
-    loss =   sum([(yout-yin)**2 for  yout ,yin in zip(ys,ypredictability)])
+    def parameters(self):
+        return []
 
-    for p in n.parameters() :
-        p.grad = 0.0
-    loss.backward()
+class Neuron(Module):
 
+    def __init__(self, nin, nonlin=True):
+        self.w = [Value(random.uniform(-1,1)) for _ in range(nin)]
+        self.b = Value(0)
+        self.nonlin = nonlin
 
-    for p in n.parameters() :
-        p.data =+ 0.1 *  p.grad
-    
-    print(k,loss.data)
+    def __call__(self, x):
+        act = sum((wi*xi for wi,xi in zip(self.w, x)), self.b)
+        return act.relu() if self.nonlin else act
 
+    def parameters(self):
+        return self.w + [self.b]
 
-print (ypredictability)
+    def __repr__(self):
+        return f"{'ReLU' if self.nonlin else 'Linear'}Neuron({len(self.w)})"
+
+class Layer(Module):
+
+    def __init__(self, nin, nout, **kwargs):
+        self.neurons = [Neuron(nin, **kwargs) for _ in range(nout)]
+
+    def __call__(self, x):
+        out = [n(x) for n in self.neurons]
+        return out[0] if len(out) == 1 else out
+
+    def parameters(self):
+        return [p for n in self.neurons for p in n.parameters()]
+
+    def __repr__(self):
+        return f"Layer of [{', '.join(str(n) for n in self.neurons)}]"
+
+class MLP(Module):
+
+    def __init__(self, nin, nouts):
+        sz = [nin] + nouts
+        self.layers = [Layer(sz[i], sz[i+1], nonlin=i!=len(nouts)-1) for i in range(len(nouts))]
+
+    def __call__(self, x):
+        for layer in self.layers:
+            x = layer(x)
+        return x
+
+    def parameters(self):
+        return [p for layer in self.layers for p in layer.parameters()]
+
+    def __repr__(self):
+        return f"MLP of [{', '.join(str(layer) for layer in self.layers)}]"
